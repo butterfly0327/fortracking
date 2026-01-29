@@ -34,6 +34,10 @@ class ServoView:
 
         self.current_pan = safe_pan
         self.update_servos()
+
+    def set_pan_angle(self, angle):
+        self.current_pan = angle
+        self.update_servos()
             
     def update_servos(self):
         self.pan.angle = self.current_pan

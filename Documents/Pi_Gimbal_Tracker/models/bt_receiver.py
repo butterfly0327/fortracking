@@ -1,16 +1,18 @@
+import json
 import os
 import socket
-import json
 import threading
-import config
+import time
 
 class BluetoothReceiver:
     def __init__(self):
 
         os.system("sudo rfcomm release all")
 
-        self.last_x = 0.5
-        self.last_y = 0.5
+        self._lock = threading.Lock()
+        self.latest_xr_norm = None
+        self.latest_v_norm = None
+        self.last_rx_time = None
         self.server_sock = None
         self.client_sock = None
         self.running = True
@@ -72,12 +74,39 @@ class BluetoothReceiver:
     def parse(self, json_str):
         try:
             data = json.loads(json_str)
-            if 'x' in data: 
-                self.last_x = float(data['x'])
-            if 'y' in data: 
-                self.last_y = float(data['y'])
+            xr_norm = self._parse_norm_value(data.get("ex"), data.get("sx"))
+            v_norm = self._parse_norm_value(data.get("ev"), data.get("sv"))
+            now = time.monotonic()
+            with self._lock:
+                self.latest_xr_norm = xr_norm
+                self.latest_v_norm = v_norm
+                self.last_rx_time = now
         except Exception as e:
             print(f"[Error] 파싱 실패: {e}")
 
-    def get_coords(self):
-        return self.last_x, self.last_y
+    def _parse_norm_value(self, primary, secondary):
+        primary_val = self._validate_int(primary)
+        secondary_val = self._validate_int(secondary)
+
+        if primary_val is None and secondary_val is None:
+            return None
+
+        if primary_val is not None and secondary_val is not None:
+            value_1000 = (primary_val + secondary_val) / 2.0
+        else:
+            value_1000 = primary_val if primary_val is not None else secondary_val
+
+        return value_1000 / 1000.0
+
+    def _validate_int(self, value):
+        if value == "none":
+            return None
+        if isinstance(value, int):
+            if 0 <= value <= 1000:
+                return value
+            return None
+        return None
+
+    def get_latest(self):
+        with self._lock:
+            return self.latest_xr_norm, self.latest_v_norm, self.last_rx_time

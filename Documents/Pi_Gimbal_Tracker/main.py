@@ -1,5 +1,6 @@
 # main.py
 import time
+import config
 from models.bt_receiver import BluetoothReceiver
 from views.servo_view import ServoView
 
@@ -12,15 +13,11 @@ def main():
     
     # main.py 루프 부분 수정 제안
     try:
-        
         while True:
-            # 1. 블루투스 객체에서 최신 좌표를 가져오는지 확인
-            target_x, target_y = bt.get_coords() 
-            
-            # 2. 뷰 객체에 이 좌표를 넣어 업데이트하는지 확인
-            view.update_position(target_x, target_y)
-            
-            time.sleep(0.01)
+            now = time.monotonic()
+            xr_norm, v_norm, last_rx_time = bt.get_latest_values()
+            view.control_tick(xr_norm, v_norm, last_rx_time, now)
+            time.sleep(config.CONTROL_DT)
             
     except KeyboardInterrupt:
         print("종료합니다.")

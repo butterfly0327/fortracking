@@ -1,16 +1,17 @@
 import os
+import time
 import socket
 import json
 import threading
-import config
 
 class BluetoothReceiver:
     def __init__(self):
 
         os.system("sudo rfcomm release all")
 
-        self.last_x = 0.5
-        self.last_y = 0.5
+        self.latest_xr_norm = None
+        self.latest_v_norm = None
+        self.last_rx_time = 0.0
         self.server_sock = None
         self.client_sock = None
         self.running = True
@@ -69,15 +70,42 @@ class BluetoothReceiver:
             except Exception:
                 break # 비정상 종료 시 루프 탈출 -> finally에서 해제
             
+    def _parse_value(self, value):
+        if isinstance(value, str):
+            return None
+        if isinstance(value, int):
+            if 0 <= value <= 1000:
+                return value
+            return None
+        return None
+
+    def _select_representative(self, a_value, b_value):
+        if a_value is not None and b_value is not None:
+            return (a_value + b_value) / 2.0
+        if a_value is not None:
+            return float(a_value)
+        if b_value is not None:
+            return float(b_value)
+        return None
+
     def parse(self, json_str):
         try:
             data = json.loads(json_str)
-            if 'x' in data: 
-                self.last_x = float(data['x'])
-            if 'y' in data: 
-                self.last_y = float(data['y'])
         except Exception as e:
             print(f"[Error] 파싱 실패: {e}")
+            return
 
-    def get_coords(self):
-        return self.last_x, self.last_y
+        ex_value = self._parse_value(data.get("ex"))
+        sx_value = self._parse_value(data.get("sx"))
+        ev_value = self._parse_value(data.get("ev"))
+        sv_value = self._parse_value(data.get("sv"))
+
+        xr_1000 = self._select_representative(ex_value, sx_value)
+        v_1000 = self._select_representative(ev_value, sv_value)
+
+        self.latest_xr_norm = xr_1000 / 1000.0 if xr_1000 is not None else None
+        self.latest_v_norm = v_1000 / 1000.0 if v_1000 is not None else None
+        self.last_rx_time = time.monotonic()
+
+    def get_latest_values(self):
+        return self.latest_xr_norm, self.latest_v_norm, self.last_rx_time
